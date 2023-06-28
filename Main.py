@@ -16,9 +16,10 @@ import json
 from colorama import init, Fore, Back, Style
 init(convert=True)
 
+import Filters
+
 c_ConfigFilePath = "Config.json"
 c_SaveStateFilePath = "SaveState.json"
-
 
 def CompleteExit():
 	os.kill(os.getpid(), signal.SIGTERM)
@@ -114,20 +115,6 @@ class Address:
 
 		return Result
 
-def TestHostTelnet(Host, OutputData):
-	try:
-		async def TelnetShell(Reader, Writer):
-			while True:
-				Output = await Reader.read(1024)
-				if not Output:
-					break
-				else:
-					OutputData.append([Host, Output])
-					Reader.close()
-
-		asyncio.run(telnetlib.open_connection(Host.address, 23, shell=TelnetShell))
-	except Exception:
-		OutputData.append([Host, False])
 
 
 
@@ -271,6 +258,7 @@ def SaveState(SaveState):
 def LoadConfig():
 	Configs = {
 		"AddressesPerIteration": 0xFF,
+		"FilterCheckThreads": 80,
 		"Ports": [],
 		"PortCheck": {
 			"ThreadPoolSize": 80,
@@ -343,6 +331,56 @@ def FilterHostsPorts(NewPorts, OldPorts, HostList, OldHostPortData, PortCheckCon
 		return OpenPorts, NewPortsData
 	return False, False
 
+def RunFilterForHost(Host, Ports, Filters):
+	Results = {}
+	for Port in Ports:
+		if Port in Filters:
+			Results[Port] = Filters[Port](Host)
+		else:
+			Results[Port] = "UNK"
+	return [Host, Results]
+
+
+def RunFilters(HostsAndPorts, Threads):
+	HostsAndPortsCopy = HostsAndPorts.copy()
+	States = {
+		"Running": 0,
+		"Done": 0
+	}
+	Results = []
+
+	def RunFilterForHostWrapper(Host, Ports, Filters):
+		States["Running"] += 1
+		Results.append(RunFilterForHost(Host, Ports, Filters))
+		States["Running"] -= 1
+		States["Done"] += 1
+
+	def PrintState():
+		print(
+			Fore.YELLOW +
+			"Filtering {0}/{1}({2:.2f}%) Hosts. {3} Running Threads     ".format(
+				States["Done"],
+				len(HostsAndPorts),
+				(States["Done"] / len(HostsAndPorts)) * 100.0,
+				States["Running"]
+			)
+			+ Style.RESET_ALL,
+			end="\r"
+		)
+
+	while len(HostsAndPortsCopy) > 0 or States["Running"] > 0:
+		PrintState()
+		if Threads > States["Running"]:
+			for _ in range(Threads - States["Running"]):
+				if len(HostsAndPortsCopy) <= 0:
+					break
+				Index = list(HostsAndPortsCopy.keys())[0]
+				Ports = HostsAndPortsCopy.pop(Index)
+				threading.Thread(target=RunFilterForHostWrapper, args=(Index, Ports, Filters.c_Filters)).start()
+		time.sleep(0.01)
+	PrintState()
+	return Results
+
 
 def main():
 	g_ArgParser = argparse.ArgumentParser(
@@ -351,6 +389,7 @@ def main():
 	)
 	g_ArgParser.add_argument("-f", "--filter", dest="Filter", required=False, help="Filters Collected Ports And Prints", action="store_true")
 	g_ArgParser.add_argument("-fp", "--filterports", dest="FilterPorts", metavar="PORTS", required=False, help="Sets the ports to use when filtering (Separated by space)", nargs="+", type=int)
+	g_ArgParser.add_argument("-fc", "--filtercheck", dest="FilterCheck", required=False, help="If set uses the filters defined in \"Filters.py\" for extra host detection.", action="store_true")
 	g_ArgParser.add_argument("-fma", "--filtermatchall", dest="FilterMatchAll", required=False, help="If set the address will need to match all ports before being printed", action="store_true")
 	g_ArgParser.add_argument("-irs", "--ignorerescan", dest="IgnorePortReScan", required=False, help="If set does not execute the re-scan if ports changed.", action="store_true")
 	#g_ArgParser.add_argument("-t", "--addresstype", dest="AddressType", required=False, choices=["IPv4", "IPv6"], default="IPv4", help="Type of address used. If this option isn't set the script will try to detect the type using provided data. (Default: IPv4)")
@@ -368,6 +407,9 @@ def main():
 		print(Fore.YELLOW + "Filtering Hosts..." + Style.RESET_ALL)
 		FilterPorts = g_Arguments.FilterPorts
 		MatchAll = g_Arguments.FilterMatchAll
+
+		HostsAndPorts = {}
+
 		for HostAddress in g_SaveState["Ports"]:
 			HostPorts = g_SaveState["Ports"][HostAddress]
 			Passed = False
@@ -379,7 +421,18 @@ def main():
 					Passed = True
 
 			if Passed:
-				print(Fore.CYAN + "{} => {}".format(HostAddress, HostPorts) + Style.RESET_ALL)
+				if g_Arguments.FilterCheck:
+					HostsAndPorts[HostAddress] = HostPorts
+				else:
+					print(Fore.CYAN + "{} => {}".format(HostAddress, HostPorts) + Style.RESET_ALL)
+		if g_Arguments.FilterCheck and len(HostsAndPorts) > 0:
+			Results = RunFilters(HostsAndPorts, g_Configs["FilterCheckThreads"])
+			for Result in Results:
+				print(Fore.CYAN + Result[0] + Style.RESET_ALL)
+				Ports = Result[1]
+				for Port in Ports:
+					print(Fore.CYAN + "\t{}: {}".format(Port, Ports[Port]) + Style.RESET_ALL)
+
 
 		CompleteExit()
 
