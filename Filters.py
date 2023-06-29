@@ -41,7 +41,7 @@ def OnRTSP(Address):
 		Reader, Writer = Loop.run_until_complete(telnetlib.open_connection(Address, 554, shell=TelnetShell))
 		Loop.run_until_complete(Writer.protocol.waiter_closed)
 	except Exception as Error:
-		print(Error)
+		#print(Error)
 		pass
 
 	if Data["IsRTSP"]:
@@ -54,6 +54,5 @@ def OnRTSP(Address):
 c_Filters = {
 	554: OnRTSP,
 }
-print(OnRTSP("131.247.210.30"))
-print("so it's done huh?")
-#OPTIONS rtsp://131.247.210.30 RTSP/1.0
+
+
