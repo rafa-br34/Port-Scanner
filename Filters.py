@@ -27,12 +27,18 @@ def OnRTSP(Address):
 
 	try:
 		async def TelnetShell(Reader, Writer):
-			Writer.write("\r\nOPTIONS rtsp://{}:554 RTSP/1.0".format(Address))
+			Writer.write("\r\nDESCRIBE rtsp://{}:554 RTSP/1.0".format(Address))
 			Writer.write("\r\n")
-			print("sent")
-			Output = await Reader.read(32)
-			print("recv", Output)
-			if Output.startswith("RTSP/1.0 200 OK"):
+			Writer.write("\r\n")
+			Output = None
+			try:
+				Output = await asyncio.wait_for(Reader.read(32), timeout=5)
+			except Exception:
+				pass
+
+			
+			if Output and Output.startswith("RTSP/1.0 200 OK"):
+				print(Address)
 				Data["IsRTSP"] = True
 			Reader.close()
 			Writer.close()
@@ -41,7 +47,6 @@ def OnRTSP(Address):
 		Reader, Writer = Loop.run_until_complete(telnetlib.open_connection(Address, 554, shell=TelnetShell))
 		Loop.run_until_complete(Writer.protocol.waiter_closed)
 	except Exception as Error:
-		#print(Error)
 		pass
 
 	if Data["IsRTSP"]:
@@ -54,5 +59,3 @@ def OnRTSP(Address):
 c_Filters = {
 	554: OnRTSP,
 }
-
-

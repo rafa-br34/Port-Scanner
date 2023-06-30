@@ -428,10 +428,11 @@ def main():
 		if g_Arguments.FilterCheck and len(HostsAndPorts) > 0:
 			Results = RunFilters(HostsAndPorts, g_Configs["FilterCheckThreads"])
 			for Result in Results:
-				print(Fore.CYAN + Result[0] + Style.RESET_ALL)
 				Ports = Result[1]
-				for Port in Ports:
-					print(Fore.CYAN + "\t{}: {}".format(Port, Ports[Port]) + Style.RESET_ALL)
+				if len(Ports) > 0:
+					print(Fore.CYAN + Result[0] + Style.RESET_ALL)
+					for Port in Ports:
+						print(Fore.CYAN + "\t{}: {}".format(Port, Ports[Port]) + Style.RESET_ALL)
 
 
 		CompleteExit()
