@@ -40,12 +40,11 @@ class Address:
 	def IncrementAddress(self):
 		self.AddressOctets[-1] += 1
 		OctetsCount = len(self.AddressOctets)
-		for _i in range(OctetsCount):
-			i = OctetsCount - _i
-
+		for i in range(OctetsCount):
+			i += 1
 			if self.AddressOctets[-i] > 0xFF:
 				self.AddressOctets[-i] = 0
-				if (i + 1) < OctetsCount:
+				if (i + 1) <= OctetsCount:
 					self.AddressOctets[-(i + 1)] += 1
 
 	def FromString(self, AddressString):
@@ -447,7 +446,7 @@ def main():
 	while g_MainLoop:
 		Iteration = 0
 		try:
-			for i in range(0xFFFF_FFFF):
+			while True:
 				g_Addresses.append(g_CurrentAddress.ToString())
 				if len(g_Addresses) >= g_Configs["AddressesPerIteration"]:
 					AliveHosts = BulkPing(g_Addresses, g_Configs["Ping"])
@@ -461,7 +460,7 @@ def main():
 					g_SaveState["CurrentAddress"] = g_CurrentAddress.ToString()
 					g_Addresses = []
 
-					if Iteration % 5 == 0:
+					if Iteration % 10 == 0:
 						SaveState(g_SaveState)
 					
 					Iteration += 1
